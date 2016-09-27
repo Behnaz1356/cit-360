@@ -13,57 +13,79 @@
     db_port: 3306
     service_dir: /usr/share/nginx/{{ service_name }}
   tasks:
-    - become: yes
+    - name: Checks for selinux in the sysconfig file 
+      become: yes
       lineinfile: dest=/etc/sysconfig/selinux regexp="^SELINUX=" line="SELINUX=permissive"
 
-    - become: yes
+    - name: Puts SELinux in permissive mode
+      become: yes 
       command: setenforce 0
 
-    - yum: name=epel-release update_cache=yes state=present
+    - name: Update epel
+      become: yes
+      yum: name=epel-release update_cache=yes state=present
 
-    - become: yes
+    - name: Installs and update nginx
+      become: yes
       yum: name=nginx,php,php-fpm,php-ldap,php-mbstring,php-mcrypt,php-mysql,php-phpunit-PHPUnit update_cache=yes state=present
       register: nginx_install
 
-    - become: yes
-      shell: curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+    - name: Install php
+      become: yes
+      shell: get_url -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin filename=compose
 
-    - become: yes
+    - name: Configure nginx
+      become: yes
       copy: src=web/nginx.conf dest=/etc/nginx/nginx.conf mode=0000
       register: nginx_conf
 
-    - become: yes
-      template: src=web/vhost.conf.j2 dest=/etc/nginx/conf.d/{{ service_name }}.conf mode=0644
+    - name: Allows nginx to connect to vhost
+      become: yes
+      template: src=web/vhost.conf.j2 dest=/etc/nginx/conf.d/{{ service_name }}.conf mode=0777
       register: vhost_conf
 
-    - template: src=web/php.ini.j2 dest=/etc/php.ini mode=0644
+    - name: Configures php file
+      become: yes
+      template: src=web/php.ini.j2 dest=/etc/php.ini mode=0777
       register: php_conf
 
-    - become: yes
-      copy: src=web/php-fpm-web.conf dest=/etc/php-fpm.d/www.conf mode=0644
+    - name: Copies php fpm web to www.conf destination
+      become: yes
+      copy: src=web/php-fpm-web.conf dest=/etc/php-fpm.d/www.conf mode=0777
       register: php_fpm_conf
 
-    - become: yes
-      systemd: name=nginx state=restarted enabled=yes
+    - name: Restarts nginx
+      become: yes
+      service: name=nginx state=restarted enabled=yes
       when: nginx_install|changed or nginx_conf|changed or vhost_conf|changed
 
-    - systemd: name=php-fpm state=restarted enabled=yes
+    - name: Restarts php
+      become: yes
+      service: name=php-fpm state=restarted enabled=yes
       when: nginx_install|changed or php_conf|changed or php_fpm_conf|changed
 
-    - become: yes
-      file: path="{{ service_dir }}" state=file
+    - name: Checks to see if in service directory
+      become: yes
+      file: path="{{ service_dir }}" state=directory
 
-    - become: yes
+    - name: Unpacks service_name.tgz
+      become: yes
       unarchive: src=web/{{ service_name }}.tgz dest="{{ service_dir }}" mode=0755
 
-    - become: yes
+    - name: Change into service dir and then updates
+      become: yes
       command: /usr/local/bin/composer update chdir={{ service_dir }}
 
-    - become: yes
-      command: chmod -R 0777 storage chdir="{{ service_dir }}"
+    - name: Allows users to rwx in the service_dir file
+      become: yes
+      file: path="{{ service_dir }}" mode=0777
+      
 
-    - command: chown -R nginx:nginx . chdir="{{ service_dir }}"
+    - name: Owner of file on path is nginx
+      become: yes
+      file: owner=nginx path="{{ service_dir }}"
+      
 
-    - become: yes
+    - name: Configure service_dir enviroment of owner nginx
+      become: yes
       template: src=web/env.j2 dest="{{ service_dir }}/.env" mode=0644 owner=nginx
-
