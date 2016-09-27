@@ -3,20 +3,28 @@
   vars:
     db_password: password
   tasks:
-    - copy: src=db/MariaDB.repo dest=/etc/yum.repos.d/MariaDB.repo mode=0644
+    - name: Install MariaDB repo
+      become: yes
+      copy: src=db/MariaDB.repo dest=/etc/yum.repos.d/MariaDB.repo mode=0777
 
-    - become: yes
-      apt: name=MariaDB-server,MariaDB-client update_cache=yes state=present
+    - name: Update MariaDB server
+      become: yes
+      yum: name=MariaDB-server,MariaDB-client update_cache=yes state=present
 
-    - become: yes
+    - name: Start MariaDB
+      become: yes
       systemd: name=mariadb state=started enabled=yes
 
-    - template: src=db/mariadb_answers.txt dest=/tmp/mariadb_answers.txt mode=0644
+    - name: Template MariaDB answers to a txt file
+      template: src=db/mariadb_answers.txt dest=/tmp/mariadb_answers.txt mode=0644
 
-    - become: yes
+    - name: Redirect MariaDB.txt file into a folder in bin
+      become: yes
       shell: /usr/bin/mysql_secure_installation </tmp/mariadb_answers.txt
 
-    - unarchive: src=db/db.tgz dest=~/ mode=0000
+    - name: Unpack db.tgz to localhost
+      unarchive: src=db/db.tgz dest=~/ mode=0777
 
-    - command: ./make_databases.sh {{ db_password }} localhost chdir=~/db
+    - name: Within the db dir change databases password to db password
+      command: ./make_databases.sh {{ db_password }} localhost chdir=~/db
       ignore_errors: True
