@@ -3,28 +3,24 @@
   vars:
     db_password: password
   tasks:
-    - name: Install MariaDB repo
+    - name: Copy mariadb to yum 
       become: yes
       copy: src=db/MariaDB.repo dest=/etc/yum.repos.d/MariaDB.repo mode=0777
+       #copy task copies what is in the db folder into etc folder
 
-    - name: Update MariaDB server
+    - name: Dl MariaDB server
       become: yes
       yum: name=MariaDB-server,MariaDB-client update_cache=yes state=present
-
-    - name: Start MariaDB
-      become: yes
-      systemd: name=mariadb state=started enabled=yes
-
-    - name: Template MariaDB answers to a txt file
-      template: src=db/mariadb_answers.txt dest=/tmp/mariadb_answers.txt mode=0644
-
-    - name: Redirect MariaDB.txt file into a folder in bin
-      become: yes
-      shell: /usr/bin/mysql_secure_installation </tmp/mariadb_answers.txt
+      #apt was the orginal cmd, change to yum because that is the package manager
+      #installs mariaDB 
 
     - name: Unpack db.tgz to localhost
       unarchive: src=db/db.tgz dest=~/ mode=0777
+      #unpacks and open the 
 
-    - name: Within the db dir change databases password to db password
-      command: ./make_databases.sh {{ db_password }} localhost chdir=~/db
+    - name: Make DB
+      become:yes 
+      command: localhost chdir=~/db
       ignore_errors: True
+      #cd backs into old dir; ignore_errors ignores any errors that do occur
+      # change the dns name
