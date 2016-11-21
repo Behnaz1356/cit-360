@@ -7,6 +7,7 @@
     service_version: 1.0
     app_key: QujjaJs3fxwtnTl7FiqhEEn1ACkf7YZW
     app_env: test
+    #change db_host to the dns name in aws
     db_host: localhost
     db_database: curriculum
     db_username: curriculum
@@ -16,27 +17,31 @@
     - name: Checks for selinux in the sysconfig file 
       become: yes
       lineinfile: dest=/etc/sysconfig/selinux regexp="^SELINUX=" line="SELINUX=permissive"
+      #lineinfile will replace what is specified in regxp with the line data
 
     - name: Puts SELinux in permissive mode
       become: yes 
       command: setenforce 0
+      #
 
-    - name: Update epel
+    - name: Install epel
       become: yes
       yum: name=epel-release update_cache=yes state=present
+      # yum = install
 
     - name: Installs and update nginx
       become: yes
       yum: name=nginx,php,php-fpm,php-ldap,php-mbstring,php-mcrypt,php-mysql,php-phpunit-PHPUnit update_cache=yes state=present
       register: nginx_install
+      #this one will actaully update
 
-    - name: Install php
+    - name: Install php composer
       become: yes
-      shell: get_url -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin filename=compose
+      shell: get_url -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin filename=composer mode=0777
 
     - name: Configure nginx
       become: yes
-      copy: src=web/nginx.conf dest=/etc/nginx/nginx.conf mode=0000
+      copy: src=web/nginx.conf dest=/etc/nginx/nginx.conf mode=0640
       register: nginx_conf
 
     - name: Allows nginx to connect to vhost
@@ -66,26 +71,28 @@
 
     - name: Checks to see if in service directory
       become: yes
-      file: path="{{ service_dir }}" state=directory
+      file: path={{ service_dir }}/ state=directory
 
     - name: Unpacks service_name.tgz
       become: yes
-      unarchive: src=web/{{ service_name }}.tgz dest="{{ service_dir }}" mode=0755
+      unarchive: src=web/{{ service_name }}.tgz dest={{ service_dir }} mode=0755
 
-    - name: Change into service dir and then updates
+    - name: Composer updates nginx 
       become: yes
       command: /usr/local/bin/composer update chdir={{ service_dir }}
 
-    - name: Allows users to rwx in the service_dir file
+
+      name: Creates storage directory 
       become: yes
-      file: path="{{ service_dir }}" mode=0777
-      
+      file: path= {{ service_dir }}/storage state= directory mode=0777
+      mode: 0777
 
     - name: Owner of file on path is nginx
       become: yes
-      file: owner=nginx path="{{ service_dir }}"
+      file:path={{ service_dir }} group=nginx owner=nginx state=directory recurse=yes 
       
 
     - name: Configure service_dir enviroment of owner nginx
       become: yes
       template: src=web/env.j2 dest="{{ service_dir }}/.env" mode=0644 owner=nginx
+
