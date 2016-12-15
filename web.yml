@@ -1,35 +1,25 @@
 ---
 - hosts: web
   vars:
-    db_password: password
-    server_name: curriculum
+    server_name: curriculuminfra(asi3).tf
     service_name: curriculum
     service_version: 1.0
-    app_key: QujjaJs3fxwtnTl7FiqhEEn1ACkf7YZW
     app_env: test
     #change db_host to the dns name in aws
-    db_host: localhost
+    db_host: tf-20161215040828888518624i4p.calt7kdaagno.us-west-2.rds.amazonaws.com:3306
     db_database: curriculum
-    db_username: curriculum
+    db_username: user1
     db_port: 3306
     service_dir: /usr/share/nginx/{{ service_name }}
+  vars_files:
+    - secrets.yml
   tasks:
-    - name: Checks for selinux in the sysconfig file 
-      become: yes
-      lineinfile: dest=/etc/sysconfig/selinux regexp="^SELINUX=" line="SELINUX=permissive"
-      #lineinfile will replace what is specified in regxp with the line data
-
-    - name: Puts SELinux in permissive mode
-      become: yes 
-      command: setenforce 0
-      #
-
     - name: Install epel
       become: yes
       yum: name=epel-release update_cache=yes state=present
       # yum = install
 
-    - name: Installs and update nginx
+    - name: Installs and update php
       become: yes
       yum: name=nginx,php,php-fpm,php-ldap,php-mbstring,php-mcrypt,php-mysql,php-phpunit-PHPUnit update_cache=yes state=present
       register: nginx_install
