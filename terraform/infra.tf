@@ -4,6 +4,10 @@ variable "vpc_id" {
   default = "vpc-29e0114e"
 }
 
+variable "aws_key_name" {
+  default = "cit360"
+  }
+
 # Configure the AWS Provider
 provider "aws" {
   region     = "us-west-2"
@@ -47,7 +51,7 @@ resource "aws_subnet" "public_subnet_1" {
 #2nd public subnet
 resource "aws_subnet" "public_subnet_2" {
     vpc_id = "${var.vpc_id}"
-    cidr_block = "172.31.1.0/24"
+    cidr_block = "172.31.3.0/24"
     availability_zone = "us-west-2b"
 
     tags {
@@ -65,8 +69,6 @@ resource "aws_subnet" "public_subnet_3" {
         Name = "public_3"
     }
 }
-
-
 
 #associates a subnet with the routing table 
 #route table assoc for pub_subnet_1
@@ -86,33 +88,8 @@ resource "aws_route_table_association" "public_subnet_3_rt_assoc" {
     subnet_id = "${aws_subnet.public_subnet_3.id}"
     route_table_id = "${aws_route_table.public_routing_table.id}"
 }
+#start of attempt at nat
 
-#create a security group 
-resource "aws_security_group" "allow_ssh" {
-  name = "allow_ssh"
-  description = "Allow ssh inbound traffic"
-
-  ingress {
-      from_port = 22
-      to_port = 22
-      protocol = "tcp"
-      cidr_blocks = ["172.31.0.0/24"]
-  }
-}
-
-# Create a new instance of the latest linux 
-resource "aws_instance" "bastion" {
-    ami = "ami-b04e92d0" 
-    associate_public_ip_address = true
-    subnet_id = "${aws_subnet.public_subnet_1.id}"
-    instance_type = "t2.micro"
-    tags {
-        Name = "Bastion instance "
-    }
-}
-
-#Start of Private subnet and Nat gateway
-#Builds a nat gateway 
 resource "aws_nat_gateway" "nat_gw" {
     allocation_id = "${aws_eip.nat.id}"
     subnet_id = "${aws_subnet.private_subnet_1.id}"
@@ -132,7 +109,6 @@ resource "aws_route_table" "pri_routing_table" {
   route {
 
     cidr_block = "0.0.0.0/0"
-    #gateway_id = "${aws_internet_gateway.gw.id}"
     nat_gateway_id = "${aws_nat_gateway.nat_gw.id}"
   }
 
@@ -140,6 +116,7 @@ resource "aws_route_table" "pri_routing_table" {
     Name = "private_routing_table"
   }
 }
+
 
 
 
@@ -201,83 +178,130 @@ resource "aws_route_table_association" "private_subnet_3_rt_assoc" {
     subnet_id = "${aws_subnet.private_subnet_3.id}"
     route_table_id = "${aws_route_table.pri_routing_table.id}"
 }
-#Create a DB subnet
-resource "aws_db_subnet_group" "DB_subnet_group" {
-    name = "DB subnet"
-    subnet_ids = ["${aws_subnet.private_subnet.id}", "${aws_subnet.private_subnet_2.id}"]
+
+
+
+#create a security group 
+resource "aws_security_group" "allow_ssh" {
+  name = "allow_ssh"
+  description = "Allow ssh inbound traffic"
+
+  ingress {
+      from_port = 22
+      to_port = 22
+      protocol = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+  from_port = 0
+  to_port = 0
+  protocol = "-1"
+  cidr_blocks = ["0.0.0.0/0"]
+  } 
+}
+
+# Create a new instance of the latest linux on an
+# t2.micro node 
+resource "aws_instance" "bastion" {
+    ami = "ami-5ec1673e" 
+    associate_public_ip_address = true
+    subnet_id = "${aws_subnet.public_subnet_1.id}"
+    instance_type = "t2.micro"
+    
+    key_name = "${var.aws_key_name}"
+    vpc_security_group_ids = ["${aws_security_group.allow_ssh.id}"]
     tags {
-        Name = "My DB subnet group"
+        Name = "Bastion instance "
     }
 }
-#Ralation Database Service(RDS) Instances
-resource "aws_db_instance" "default" {
+
+#Create a DB subnet
+resource "aws_db_subnet_group" "DB_subnet_group" {
+    name = "db subnet"
+    subnet_ids = ["${aws_subnet.private_subnet_1.id}", "${aws_subnet.private_subnet_2.id}"]
+    tags {
+        Name = " DB subnet group"
+    }
+}
+
+
+ #Create maria db
+resource "aws_db_instance" "mariaDB" {
   allocated_storage    = 5
   engine               = "mariadb"
   engine_version       = "10.0.24"
   instance_class       = "db.t2.micro"
-  multi_az             = "NO"
-  name                 = "Maria Database"
-  username             = "master user"
+  name                 = "mariadatabase"
+ username             = "root"
   password             = "${var.mariadb_password}"
-  storage type         = "gp2"
+  multi_az             = "false"
+  storage_type         = "gp2"
   db_subnet_group_name = "${aws_db_subnet_group.DB_subnet_group.id}"
-   tags {
-        Name = "RDS Instances"
+  vpc_security_group_ids = ["${aws_security_group.sec_grp_2.id}"]
+  tags {
+        #Name = "Maria Database "
     }
+}
 
-#Create a security group 
-resource "aws_security_group" "sec_group" {
-  name = "sec_group"
-  description = "Allow sec_group inbound traffic"
+#a security group with port 80, port 22
+resource "aws_security_group" "sec_grp_2" {
+  name = "Second security group"
+  description = "Allows instances to access port 80 and port 22"
 
   ingress {
       from_port = 80
       to_port = 80
-      protocol = "ISO Internet Protocol"
+      protocol = "tcp"
       cidr_blocks = ["172.31.0.0/24"]
   }
+
   ingress {
       from_port = 22
       to_port = 22
-      protocol = "XEROX NS IDP"
+      protocol = "tcp"
       cidr_blocks = ["172.31.0.0/24"]
   }
-  tags {
-        Name = "Create new security group"
-    }
 
+  egress {
+        from_port = 0
+        to_port = 0
+        protocol = "-1"
+        cidr_blocks = ["0.0.0.0/0"]
+  }
 }
-#Create a security group 
-resource "aws_security_group" "elb_group" {
-  name = "elb_group"
-  description = "Allow elb_group inbound traffic"
+
+# create a security group for ELB 
+resource "aws_security_group" "ELB_sec_grp" {
+  name = "ELB security group"
+  description = "Allows port 80 ingress from anywhere"
 
   ingress {
       from_port = 80
       to_port = 80
-      protocol = "ISO Internet Protocol"
+      protocol = "tcp"
       cidr_blocks = ["0.0.0.0/0"]
   }
-  
-  tags {
-        Name = "Create new security group"
-    }
 
+  egress {
+  from_port = 0
+  to_port = 0
+  protocol = "-1"
+  cidr_blocks = ["0.0.0.0/0"]
+  } 
 }
 
-# Create a new load balancer (ELB)
+# Create a new load balancer
 resource "aws_elb" "elb" {
-  name = "elb"
-  subnets = "${aws_subnet.public_subnet_2.id}"
-  subnets = "${aws_subnet.public_subnet_3.id}"
-  security_groups = "${aws_security_group.elb_group.id}"
-  
+  name = "ELB-web"
+  subnets = ["${aws_subnet.public_subnet_2.id}", "${aws_subnet.public_subnet_3.id}"]
+  security_groups = ["${aws_security_group.ELB_sec_grp.id}"]
+
   listener {
     instance_port = 80
     instance_protocol = "http"
     lb_port = 80
     lb_protocol = "http"
-    
   }
 
   health_check {
@@ -288,39 +312,39 @@ resource "aws_elb" "elb" {
     interval = 30
   }
 
-  instances = ["${aws_instance.foo.id}"]
-  cross_zone_load_balancing = true
-  idle_timeout = 60
+  instances = ["${aws_instance.webserver-b.id}", "${aws_instance.webserver-c.id} "]
   connection_draining = true
   connection_draining_timeout = 60
 
   tags {
-    Name = "elb"
+    Name = "ELB for instances created"
   }
 }
-#Create 2 instances that will run the web service
 
+#Create a new instance to run web services(linux)
 resource "aws_instance" "webserver-b" {
     ami = "ami-5ec1673e"
     instance_type = "t2.micro"
-    private_ip = "${aws_subnet.private_subnet_2.id}"
+    subnet_id = "${aws_subnet.private_subnet_2.id}"
+    associate_public_ip_address = false
+    vpc_security_group_ids = ["${aws_security_group.sec_grp_2.id}"]
     key_name = "cit360"
-
     tags {
         Name = "webserver-b"
-        Service = "curriculum"
+        Service = "curriculum "
     }
-  } 
-
+}
+#Create a 2nd instance to run web services(linux)
 resource "aws_instance" "webserver-c" {
     ami = "ami-5ec1673e"
     instance_type = "t2.micro"
-    private_ip = "${aws_subnet.private_subnet_3.id}"
-    key_name ="cit360"
+    subnet_id = "${aws_subnet.private_subnet_3.id}"
+    associate_public_ip_address = false
+    vpc_security_group_ids = ["${aws_security_group.sec_grp_2.id}"]
 
+    key_name = "cit360"
     tags {
         Name = "webserver-c"
-        Service = "curriculum"
+        Service = "curriculum "
     }
 }
-  
