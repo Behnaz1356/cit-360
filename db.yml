@@ -1,6 +1,7 @@
 ---
 - hosts: db
   vars:
+    variable "mariadb_password" {}
     db_password: password
   tasks:
     - name: Copy mariadb to yum 
