@@ -20,7 +20,7 @@
 
     - name: Make DB
       become:yes 
-      command: localhost chdir=~/db
+      command: ./make_databases.sh {{ db_password }} tf-20161215040828888518624i4p.calt7kdaagno.us-west-2.rds.amazonaws.com:3306 chdir=~/db
       ignore_errors: True
       #cd backs into old dir; ignore_errors ignores any errors that do occur
       # change the dns name
